@@ -97,11 +97,11 @@ def find_local_max(image, x, y, window_size):
 app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.h3("Image Info"),
-        ui.output_text("image_info"),
+        # ui.output_text("image_info"),
+        ui.output_text_verbatim("image_info"),
 
         ui.h3("Options"),  # New header for options
         ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
-
     ),
     ui.div(
         ui.output_ui("dynamic_card"),  # Render the card dynamically
@@ -137,21 +137,21 @@ def server(input, output, session):
     def dynamic_card():
         current_image_name = os.path.basename(get_current_image_path())
         metadata = get_image_metadata(current_image_name)
+        
         return ui.card(
-            ui.card_header(f"Image: {current_image_name}"),  # Dynamically set header
+            ui.card_header(f"Image: {current_image_name}"),
             ui.output_plot(
                 "image_plot",
                 click=True,
-                width="800px",
-                height="800px"
+                width="800px",  # Match the image dimensions
+                height="800px",
             ),
             ui.card_footer(
                 f"Type: {metadata['Particle Type']} | "
                 f"Dose: {metadata['Dose (Gy)']} Gy | "
                 f"Hours Post Exposure: {metadata['Hours Post Exposure']}"
             ),
-            width="800px",
-            height="800px",
+            style="width: 820px; height: 700px; max-width: 820px; margin-left: 0;",  # Left-aligned card
         )
 
     # Render the plot
