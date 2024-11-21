@@ -101,6 +101,11 @@ app_ui = ui.page_sidebar(
         ui.output_text_verbatim("image_info"),
 
         ui.h3("Options"),  # New header for options
+        ui.input_radio_buttons(
+            "selection_mode", "Selection Mode",
+            choices={"click": "Click", "brush": "Area"},
+            selected="click"
+        ),
         ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
     ),
     ui.div(
@@ -143,6 +148,7 @@ def server(input, output, session):
             ui.output_plot(
                 "image_plot",
                 click=True,
+                brush=True,
                 width="800px",  # Match the image dimensions
                 height="800px",
             ),
@@ -191,6 +197,8 @@ def server(input, output, session):
     @reactive.Effect
     @reactive.event(input.image_plot_click)
     def record_click():
+        if input.selection_mode() != "click":
+            return
         image_data = current_image_data()
         if image_data is None:
             return
@@ -215,6 +223,45 @@ def server(input, output, session):
                     selected_points.set(selected_points() + [(clicked_x, clicked_y)])
             else:
                 print(f"Click ({clicked_x}, {clicked_y}) is outside image bounds. Ignoring.")
+
+    @reactive.Effect
+    @reactive.event(input.image_plot_brush)
+    def record_brush():
+        if input.selection_mode() != "brush":
+            return
+        
+        brush = input.image_plot_brush()
+        image_data = current_image_data()
+        
+        if brush is not None and image_data is not None:
+            # Get brushed region bounds
+            x_min, x_max = int(brush["xmin"]), int(brush["xmax"])
+            y_min, y_max = int(brush["ymin"]), int(brush["ymax"])
+            
+            # Clip the coordinates to stay within image bounds
+            height, width = image_data.shape
+            x_min = max(0, min(x_min, width - 1))
+            x_max = max(0, min(x_max, width - 1))
+            y_min = max(0, min(y_min, height - 1))
+            y_max = max(0, min(y_max, height - 1))
+            
+            # Extract the brushed region
+            brushed_region = image_data[y_min:y_max + 1, x_min:x_max + 1]
+            
+            if input.enable_local_max():
+                # Find the brightest point in the brushed region
+                local_max_idx = np.unravel_index(np.argmax(brushed_region), brushed_region.shape)
+                adjusted_x = x_min + local_max_idx[1]  # Add offset to global coordinates
+                adjusted_y = y_min + local_max_idx[0]
+                print(f"Brightest point in brush: ({adjusted_x}, {adjusted_y})")
+                selected_points.set(selected_points() + [(adjusted_x, adjusted_y)])
+            else:
+                # Default: Use the center of the brushed region
+                center_x = (x_min + x_max) // 2
+                center_y = (y_min + y_max) // 2
+                print(f"Center of brush: ({center_x}, {center_y})")
+                selected_points.set(selected_points() + [(center_x, center_y)])
+
 
     # Handle reset button
     @reactive.Effect
