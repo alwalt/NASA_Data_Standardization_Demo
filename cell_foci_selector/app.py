@@ -96,17 +96,29 @@ def find_local_max(image, x, y, window_size):
 # Shiny UI
 app_ui = ui.page_sidebar(
     ui.sidebar(
-        ui.h3("Image Info"),
-        # ui.output_text("image_info"),
-        ui.output_text_verbatim("image_info"),
-
-        ui.h3("Options"),  # New header for options
+    ui.h2("Foci Labeler", style="""
+        text-align: center;
+        margin-bottom: 10px;
+        # background-color: #0B3D91; /* Green background */
+        # color: white; /* White text color */
+        # padding: 10px; /* Add padding for better spacing */
+        # border-radius: 8px; /* Optional: Rounded corners */
+        """
+        ),
+        ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),  # Adds a horizontal line
+        ui.h3("Options",
+              style="margin-top: 5px; margin-bottom: 5px;"),  # New header for options
         ui.input_radio_buttons(
             "selection_mode", "Selection Mode",
             choices={"click": "Point", "brush": "Area"},
             selected="click"
         ),
         ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
+        ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),  # Adds a horizontal line
+        ui.h3("Image Info",
+              style="margin-top: 5px; margin-bottom: 5px;"),
+        # ui.output_text("image_info"),
+        ui.output_text_verbatim("image_info"),
     ),
     ui.div(
         ui.output_ui("dynamic_card"),  # Render the card dynamically

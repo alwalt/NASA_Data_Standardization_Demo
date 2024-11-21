@@ -1,5 +1,14 @@
 {
     "image_name": "P242_73665006707-A6_001_001_proj.tif",
-    "selected_points": [],
-    "corrupted": true
+    "selected_points": [
+        [
+            48,
+            33
+        ],
+        [
+            72,
+            28
+        ]
+    ],
+    "corrupted": false
 }
