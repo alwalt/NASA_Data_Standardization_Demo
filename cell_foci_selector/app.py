@@ -6,6 +6,28 @@ import cv2
 import json
 import os
 import glob
+import pandas as pd
+
+# Load the metadata from the CSV file
+meta_file = "metadata/meta.csv"
+metadata_df = pd.read_csv(meta_file)
+
+# Function to get metadata for the current image
+def get_image_metadata(image_name):
+    # Extract metadata for the given image name
+    row = metadata_df[metadata_df["filename"] == image_name]
+    if not row.empty:
+        return {
+            "Dose (Gy)": row.iloc[0]["dose_Gy"],
+            "Particle Type": row.iloc[0]["particle_type"],
+            "Hours Post Exposure": row.iloc[0]["hr_post_exposure"],
+        }
+    else:
+        return {
+            "Dose (Gy)": "Unknown",
+            "Particle Type": "Unknown",
+            "Hours Post Exposure": "Unknown",
+        }
 
 # Load all .tif images in the folder
 image_folder = "static"
@@ -70,28 +92,29 @@ def find_local_max(image, x, y, window_size):
     global_x = x - (window.shape[1] // 2) + local_max[1]
     return global_x, global_y
 
-# Load the .tif image
-image_name = "P280_73668439105-C7_021_010_proj.tif"
-image_path = f"static/{image_name}"
-image_data = load_image(image_path)
 
 # Shiny UI
-app_ui = ui.page_fluid(
-    ui.h2("Interactive Foci Selector for .tif Image"),
-    ui.output_plot(
-        "image_plot", 
-        click=True,  # Enable click interaction
-        width="800px", 
-        height="800px"
+app_ui = ui.page_sidebar(
+    ui.sidebar(
+        ui.h3("Image Info"),
+        ui.output_text("image_info"),
+
+        ui.h3("Options"),  # New header for options
+        ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
+
     ),
     ui.div(
-        ui.input_action_button("reset", "Reset Selections", class_="btn-primary"),
-        ui.input_action_button("undo", "Undo Last Selection", class_="btn-secondary"),
-        ui.input_action_button("report", "Report as Corrupted", class_="btn-danger"),
-        ui.input_action_button("submit", "Submit", class_="btn-success"),
-        style="display: flex; gap: 10px; margin-top: 15px;"  # Align buttons horizontally
+        ui.output_ui("dynamic_card"),  # Render the card dynamically
+        ui.div(
+            ui.input_action_button("reset", "Reset Selections", class_="btn-primary"),
+            ui.input_action_button("undo", "Undo Last Selection", class_="btn-secondary"),
+            ui.input_action_button("report", "Report as Corrupted", class_="btn-danger"),
+            ui.input_action_button("submit", "Submit", class_="btn-success"),
+            style="display: flex; gap: 10px; margin-top: 15px;"  # Buttons below the card
+        ),
     )
 )
+
 
 # Shiny Server
 def server(input, output, session):
@@ -99,31 +122,99 @@ def server(input, output, session):
     selected_points = reactive.Value([])
     corrupted = reactive.Value(False)
 
+    # Reactive value to store the current image data
+    current_image_data = reactive.Value(None)
+
+    # Load the current image data when the image index changes
+    @reactive.Effect
+    def update_image_data():
+        current_image_data.set(load_current_image())
+
+
+    # Dynamically render the card
+    @output
+    @render.ui
+    def dynamic_card():
+        current_image_name = os.path.basename(get_current_image_path())
+        metadata = get_image_metadata(current_image_name)
+        return ui.card(
+            ui.card_header(f"Image: {current_image_name}"),  # Dynamically set header
+            ui.output_plot(
+                "image_plot",
+                click=True,
+                width="800px",
+                height="800px"
+            ),
+            ui.card_footer(
+                f"Type: {metadata['Particle Type']} | "
+                f"Dose: {metadata['Dose (Gy)']} Gy | "
+                f"Hours Post Exposure: {metadata['Hours Post Exposure']}"
+            ),
+            width="800px",
+            height="800px",
+        )
+
     # Render the plot
     @output
     @render.plot
     def image_plot():
         fig, ax = plt.subplots()
-        image_data = load_current_image()  # Load the current image
+        image_data = current_image_data()  # Load the current image
         ax.imshow(image_data, cmap="gray")
         for x, y in selected_points():
             ax.plot(x, y, "ro")  # Plot selected points in red
-        ax.set_title(f"Image: {os.path.basename(get_current_image_path())}")
+        # ax.set_title(f"Image: {os.path.basename(get_current_image_path())}")
         ax.axis("off")
         return fig
+    
+    @output
+    @render.text
+    def image_info():
+        # Get the current image file name
+        current_image_name = os.path.basename(get_current_image_path())
+        
+        # Get metadata for the current image
+        current_metadata = get_image_metadata(current_image_name)
+        
+        # Manually format each piece of metadata on a new line
+        info = (
+            f"File Name: {current_image_name}\n"
+            f"Dose (Gy): {current_metadata['Dose (Gy)']}\n"
+            f"Particle Type: {current_metadata['Particle Type']}\n"
+            f"Hours Post Exposure: {current_metadata['Hours Post Exposure']}"
+        )
+        
+        return info
+
 
     # Handle click events
     @reactive.Effect
     @reactive.event(input.image_plot_click)
     def record_click():
+        image_data = current_image_data()
+        if image_data is None:
+            return
         click = input.image_plot_click()
         if click is not None:
-            clicked_x, clicked_y = int(click["x"]), int(click["y"])  # Ensure coordinates are integers
-            print(f"Clicked coordinates: ({clicked_x}, {clicked_y})")  # Debugging
-            adjusted_x, adjusted_y = find_local_max(image_data, clicked_x, clicked_y, window_size=7)
-            print(f"Adjusted coordinates: ({adjusted_x}, {adjusted_y})")  # Debugging
-            # Update selected points
-            selected_points.set(selected_points() + [(adjusted_x, adjusted_y)])
+            clicked_x, clicked_y = int(click["x"]), int(click["y"])
+            height, width = image_data.shape[:2]
+
+            # Check if click is within bounds
+            if 0 <= clicked_x < width and 0 <= clicked_y < height:
+                print(f"Clicked coordinates: ({clicked_x}, {clicked_y})")
+
+                # Apply local max adjustment if enabled
+                if input.enable_local_max():
+                    adjusted_x, adjusted_y = find_local_max(image_data, clicked_x, clicked_y, window_size=7)
+                    if 0 <= adjusted_x < width and 0 <= adjusted_y < height:
+                        print(f"Adjusted coordinates: ({adjusted_x}, {adjusted_y})")
+                        selected_points.set(selected_points() + [(adjusted_x, adjusted_y)])
+                    else:
+                        print(f"Adjusted coordinates ({adjusted_x}, {adjusted_y}) are out of bounds. Ignoring.")
+                else:
+                    selected_points.set(selected_points() + [(clicked_x, clicked_y)])
+            else:
+                print(f"Click ({clicked_x}, {clicked_y}) is outside image bounds. Ignoring.")
 
     # Handle reset button
     @reactive.Effect
