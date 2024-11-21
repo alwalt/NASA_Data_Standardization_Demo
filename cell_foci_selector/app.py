@@ -103,7 +103,7 @@ app_ui = ui.page_sidebar(
         ui.h3("Options"),  # New header for options
         ui.input_radio_buttons(
             "selection_mode", "Selection Mode",
-            choices={"click": "Click", "brush": "Area"},
+            choices={"click": "Point", "brush": "Area"},
             selected="click"
         ),
         ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
