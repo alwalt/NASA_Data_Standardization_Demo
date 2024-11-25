@@ -67,16 +67,20 @@ def load_current_image():
     return load_image(image_path)
 
 # Save results as JSON
-def save_results(image_name, selected_points, corrupted, output_dir="results"):
+def save_results(image_name, selected_points, corrupted, updated_name, output_dir="results"):
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
+
+    # If updated_name is None, fall back to image_name
+    name_to_save = updated_name if updated_name else image_name
+
     # Define the output file path
-    output_path = os.path.join(output_dir, f"{os.path.splitext(image_name)[0]}.json")
+    output_path = os.path.join(output_dir, f"{os.path.splitext(name_to_save)[0]}.json")
     # Create the data dictionary
     data = {
-        "image_name": image_name,
+        "name": name_to_save, 
         "selected_points": [[int(x), int(y)] for x, y in selected_points],  # Convert coordinates to Python int
-        "corrupted": bool(corrupted),  # Ensure boolean value is properly serialized
+        "corrupted": bool(corrupted),
     }
     # Save as JSON
     with open(output_path, "w") as f:
@@ -138,10 +142,10 @@ image_ui = ui.page_fluid(
     ),
     ui.div(
         ui.card(
-            ui.input_text("image_info", "File Name:", value=''),
+            ui.input_text("image_info", "File Name:", value=""),
             ui.output_text_verbatim("info"),
         ),
-        style="flex: 3; "
+        style="flex: 3; align-items: flex-start; justify-content: flex-start;"  # Adjust alignment for better fit
     ),
     style="display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 20px;"
 )
@@ -335,23 +339,31 @@ def image_server(input, output, session):
     @reactive.event(input.report)
     def report_corrupted():
         print("Reporting image as corrupted...")  # Debugging
+        updated_name = input.image_info()
         save_results(
             os.path.basename(get_current_image_path()),  # Save current image
             [],
-            True
+            True,
+            updated_name,
         )
         move_to_next_image()  # Move to next image
+  
 
     # Handle submit button
     @reactive.Effect
     @reactive.event(input.submit)
     def submit_data():
-        current_name = input.image_info()
+         # Fetch the original file name and the updated name from the input_text
+        original_name = os.path.basename(get_current_image_path())  # Original file name
+        updated_name = input.image_info()  # User-modified or default name from input_text
         save_results(
-            os.path.basename(get_current_image_path()),
+            original_name,
+            # os.path.basename(get_current_image_path()),
             selected_points(),
-            False
+            False,
+            updated_name,
         )
+
         move_to_next_image()
 
     def move_to_next_image():
