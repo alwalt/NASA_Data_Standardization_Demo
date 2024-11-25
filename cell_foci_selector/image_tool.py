@@ -32,6 +32,14 @@ def get_current_image_path():
         return None  # Return None if no images are available
     return images[current_image_index()]
 
+# Function to get the current image name safely
+def get_current_image_name():
+    image_path = get_current_image_path()
+    if image_path is None:
+        return "No image selected"
+    return os.path.basename(image_path)
+
+
 # Function to load and preprocess the image
 def load_image(file_path, target_size=None):
     # Load the image using OpenCV
@@ -93,7 +101,7 @@ def find_local_max(image, x, y, window_size):
 
 
 # Image UI
-image_ui = ui.div(
+image_ui = ui.page_fluid(
     ui.div(
         ui.card(
             ui.h2("Imaging Tools", style="text-align: center; margin-bottom: 10px;"),
@@ -113,8 +121,6 @@ image_ui = ui.div(
             ),
             ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
             ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),
-            ui.h3("Image Info", style="margin-top: 5px; margin-bottom: 5px;"),
-            ui.output_text_verbatim("image_info"),
             style="padding: 20px;  width: 340px;"
         ),
         style="flex: 0 0 auto; padding-right: 10px;"
@@ -130,6 +136,13 @@ image_ui = ui.div(
         ),
         style="flex: 2;"
     ),
+    ui.div(
+        ui.card(
+            ui.input_text("image_info", "File Name:", value=''),
+            ui.output_text_verbatim("info"),
+        ),
+        style="flex: 3; "
+    ),
     style="display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 20px;"
 )
 
@@ -139,9 +152,6 @@ def image_server(input, output, session):
     selected_points = reactive.Value([])
     corrupted = reactive.Value(False)
     current_image_data = reactive.Value(None)  # Current image data
-
-    # # Refresh the image list on app initialization
-    # refresh_image_list()  # This updates the image_list reactive value
 
     # Refresh the image list on app initialization using a reactive context
     @reactive.Effect
@@ -164,8 +174,6 @@ def image_server(input, output, session):
         else:
             current_image_data.set(load_current_image())
             print(f"Image data updated for image: {get_current_image_path()}")
-
-
 
     # Dynamically render the card
     @output
@@ -204,6 +212,25 @@ def image_server(input, output, session):
             ),
             style="width: 820px; height: 700px; max-width: 820px; margin-left: 0;"
         )
+    
+    # Reactive value to track if the input has been overridden
+    name_overridden = reactive.Value(False)
+
+    @reactive.Effect
+    def check_override():
+        # Check if the user has written something in the input field
+        if input.image_info() and input.image_info() != get_current_image_name():
+            name_overridden.set(True)  # User has overridden the name
+        else:
+            name_overridden.set(False)  # Use the default image name
+
+    @output
+    @render.text
+    def info():
+        # If overridden, display the user-provided name; otherwise, show the current image name
+        if name_overridden():
+            return f"Overridden File Name: {input.image_info()}"
+        return f"Current Image Name: {get_current_image_name()}"
 
 
     # Render the plot
@@ -319,6 +346,7 @@ def image_server(input, output, session):
     @reactive.Effect
     @reactive.event(input.submit)
     def submit_data():
+        current_name = input.image_info()
         save_results(
             os.path.basename(get_current_image_path()),
             selected_points(),
