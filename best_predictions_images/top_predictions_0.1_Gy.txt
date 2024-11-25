@@ -1,0 +1,3 @@
+BPS-Microscopy/train/P279_73668277350-C7_035_004_proj.tif
+BPS-Microscopy/train/P279_73668277350-F5_018_024_proj.tif
+BPS-Microscopy/train/P279_73668277350-E6_017_011_proj.tif
