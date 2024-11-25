@@ -9,34 +9,54 @@ import glob
 import pandas as pd
 
 # Load the metadata from the CSV file
-meta_file = "metadata/meta.csv"
-metadata_df = pd.read_csv(meta_file)
+# meta_file = "metadata/meta.csv"
+# metadata_df = pd.read_csv(meta_file)
 
 # Function to get metadata for the current image
-def get_image_metadata(image_name):
-    # Extract metadata for the given image name
-    row = metadata_df[metadata_df["filename"] == image_name]
-    if not row.empty:
-        return {
-            "Dose (Gy)": row.iloc[0]["dose_Gy"],
-            "Particle Type": row.iloc[0]["particle_type"],
-            "Hours Post Exposure": row.iloc[0]["hr_post_exposure"],
-        }
-    else:
-        return {
-            "Dose (Gy)": "Unknown",
-            "Particle Type": "Unknown",
-            "Hours Post Exposure": "Unknown",
-        }
+# def get_image_metadata(image_name):
+#     # Extract metadata for the given image name
+#     row = metadata_df[metadata_df["filename"] == image_name]
+#     if not row.empty:
+#         return {
+#             "Dose (Gy)": row.iloc[0]["dose_Gy"],
+#             "Particle Type": row.iloc[0]["particle_type"],
+#             "Hours Post Exposure": row.iloc[0]["hr_post_exposure"],
+#         }
+#     else:
+#         return {
+#             "Dose (Gy)": "Unknown",
+#             "Particle Type": "Unknown",
+#             "Hours Post Exposure": "Unknown",
+#         }
+
+
 
 # Load all .tif images in the folder
 image_folder = "static"
-image_list = sorted(glob.glob(os.path.join(image_folder, "*.tif")))  # Sorted list of images
+# Reactive image list to store the list of images
+image_list = reactive.Value([])  # Track list of images reactively
 current_image_index = reactive.Value(0)  # Track current image index
 
-# Load the current image path and data
+# Handle Uploads
+import shutil
+
+# Function to refresh the list of images
+def refresh_image_list():
+    updated_list = sorted(glob.glob(os.path.join(image_folder, "*")))
+    image_list.set(updated_list)  # Update the reactive value
+
+    if len(updated_list) == 0:
+        print("Image list is empty. Please upload images.")
+    else:
+        print(f"Refreshed image list: {updated_list}")
+
+
+# Function to load the current image path safely
 def get_current_image_path():
-    return image_list[current_image_index()]
+    images = image_list()
+    if len(images) == 0:
+        return None  # Return None if no images are available
+    return images[current_image_index()]
 
 # Function to load and preprocess the image
 def load_image(file_path, target_size=None):
@@ -56,8 +76,13 @@ def load_image(file_path, target_size=None):
     # Ensure the image is a float32 numpy array
     return image.astype(np.float32)
 
+# Function to load the current image safely
 def load_current_image():
-    return load_image(get_current_image_path())
+    image_path = get_current_image_path()
+    if image_path is None:
+        print("No image path available.")
+        return None
+    return load_image(image_path)
 
 # Save results as JSON
 def save_results(image_name, selected_points, corrupted, output_dir="results"):
@@ -94,32 +119,32 @@ def find_local_max(image, x, y, window_size):
 
 
 # Shiny UI
-app_ui = ui.page_sidebar(
-    ui.sidebar(
-    ui.h2("Foci Labeler", style="""
-        text-align: center;
-        margin-bottom: 10px;
-        # background-color: #0B3D91; /* Green background */
-        # color: white; /* White text color */
-        # padding: 10px; /* Add padding for better spacing */
-        # border-radius: 8px; /* Optional: Rounded corners */
-        """
+app_ui = ui.page_fixed(
+    ui.div(
+            ui.card(
+                ui.h2("Foci Center", style="text-align: center; margin-bottom: 10px;"),
+                ui.input_file(
+                    "upload_image",
+                    label="Upload Image(s)",
+                    multiple=True,  # Allow multiple files
+                    accept=[".tif", ".png", ".jpg"],  # Accepted image formats
+                ),
+                ui.input_action_button("refresh_images", "Refresh Image List", class_="btn-info"),
+                ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),  # Adds a horizontal line
+                ui.h3("Options", style="margin-top: 5px; margin-bottom: 5px;"),
+                ui.input_radio_buttons(
+                    "selection_mode", "Selection Mode",
+                    choices={"click": "Point", "brush": "Area"},
+                    selected="click"
+                ),
+                ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
+                ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),  # Adds a horizontal line
+                ui.h3("Image Info", style="margin-top: 5px; margin-bottom: 5px;"),
+                ui.output_text_verbatim("image_info"),
+                style="padding: 20px;"
+            ),
+            style="flex: 1; padding-right: 20px;"  # Sidebar takes less space compared to the main content
         ),
-        ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),  # Adds a horizontal line
-        ui.h3("Options",
-              style="margin-top: 5px; margin-bottom: 5px;"),  # New header for options
-        ui.input_radio_buttons(
-            "selection_mode", "Selection Mode",
-            choices={"click": "Point", "brush": "Area"},
-            selected="click"
-        ),
-        ui.input_checkbox("enable_local_max", "Enable Find Local Max", value=False),
-        ui.tags.hr(style="margin-top: 10px; margin-bottom: 10px;"),  # Adds a horizontal line
-        ui.h3("Image Info",
-              style="margin-top: 5px; margin-bottom: 5px;"),
-        # ui.output_text("image_info"),
-        ui.output_text_verbatim("image_info"),
-    ),
     ui.div(
         ui.output_ui("dynamic_card"),  # Render the card dynamically
         ui.div(
@@ -129,8 +154,11 @@ app_ui = ui.page_sidebar(
             ui.input_action_button("submit", "Submit", class_="btn-success"),
             style="display: flex; gap: 10px; margin-top: 15px;"  # Buttons below the card
         ),
-    )
+        style="flex: 2;"
+    ),
+        style="display: flex; gap: 20px; padding: 20px;"  # Flexbox container to align both divs
 )
+# )
 
 
 # Shiny Server
@@ -138,39 +166,69 @@ def server(input, output, session):
     # Store selected points
     selected_points = reactive.Value([])
     corrupted = reactive.Value(False)
+    current_image_data = reactive.Value(None)  # Current image data
 
-    # Reactive value to store the current image data
-    current_image_data = reactive.Value(None)
+    # # Refresh the image list on app initialization
+    # refresh_image_list()  # This updates the image_list reactive value
 
-    # Load the current image data when the image index changes
+    # Refresh the image list on app initialization using a reactive context
+    @reactive.Effect
+    def initialize_image_list():
+        refresh_image_list()  # This updates the reactive value image_list
+        if len(image_list()) > 0:
+            current_image_index.set(0)
+
+    # Load the current image data when the image index or image list changes
     @reactive.Effect
     def update_image_data():
+        images = image_list()
+        if len(images) == 0:
+            current_image_data.set(None)  # No image data to set if the list is empty
+            print("No images available. Please upload images.")
+            return
+        # Set the current image data using the updated image path
         current_image_data.set(load_current_image())
+        print(f"Image data updated for image: {get_current_image_path()}")
 
 
     # Dynamically render the card
     @output
     @render.ui
     def dynamic_card():
-        current_image_name = os.path.basename(get_current_image_path())
-        metadata = get_image_metadata(current_image_name)
+        # Make dynamic_card depend on both current_image_index and image_list
+        _ = current_image_index()  # Track reactive value of current_image_index
+        images = image_list()  # Track reactive value of image_list
+        if len(images) == 0:
+            # Show a placeholder card when no images are available
+            return ui.card(
+                ui.card_header("Upload Images"),
+                ui.div("Please upload images to start annotating."),
+                style="width: 820px; height: 700px; max-width: 820px; margin-left: 0;"
+            )
         
+        current_image_path = get_current_image_path()
+        if current_image_path is None:
+            # If no valid image is available, return placeholder
+            return ui.card(
+                ui.card_header("Upload Images"),
+                ui.div("Please upload images to start annotating."),
+                style="width: 820px; height: 700px; max-width: 820px; margin-left: 0;"
+            )
+
+        # Render the card with the image information
+        current_image_name = os.path.basename(current_image_path)
         return ui.card(
             ui.card_header(f"Image: {current_image_name}"),
             ui.output_plot(
                 "image_plot",
                 click=True,
                 brush=True,
-                width="800px",  # Match the image dimensions
+                width="800px",
                 height="800px",
             ),
-            ui.card_footer(
-                f"Type: {metadata['Particle Type']} | "
-                f"Dose: {metadata['Dose (Gy)']} Gy | "
-                f"Hours Post Exposure: {metadata['Hours Post Exposure']}"
-            ),
-            style="width: 820px; height: 700px; max-width: 820px; margin-left: 0;",  # Left-aligned card
+            style="width: 820px; height: 700px; max-width: 820px; margin-left: 0;"
         )
+
 
     # Render the plot
     @output
@@ -184,26 +242,6 @@ def server(input, output, session):
         # ax.set_title(f"Image: {os.path.basename(get_current_image_path())}")
         ax.axis("off")
         return fig
-    
-    @output
-    @render.text
-    def image_info():
-        # Get the current image file name
-        current_image_name = os.path.basename(get_current_image_path())
-        
-        # Get metadata for the current image
-        current_metadata = get_image_metadata(current_image_name)
-        
-        # Manually format each piece of metadata on a new line
-        info = (
-            f"File Name: {current_image_name}\n"
-            f"Dose (Gy): {current_metadata['Dose (Gy)']}\n"
-            f"Particle Type: {current_metadata['Particle Type']}\n"
-            f"Hours Post Exposure: {current_metadata['Hours Post Exposure']}"
-        )
-        
-        return info
-
 
     # Handle click events
     @reactive.Effect
@@ -313,7 +351,7 @@ def server(input, output, session):
         move_to_next_image()
 
     def move_to_next_image():
-        if current_image_index() + 1 < len(image_list):
+        if current_image_index() + 1 < len(image_list()):
             # Move to the next image
             current_image_index.set(current_image_index() + 1)
         else:
@@ -326,11 +364,54 @@ def server(input, output, session):
         print(f"Loading image: {get_current_image_path()}")
 
 
+
     # Display selected points
     @output
     @render.text
     def selected_points_output():
         return f"Selected Points: {selected_points()}"
+
+    
+    # Handle image uploads
+    @reactive.Effect
+    @reactive.event(input.upload_image)
+    def handle_upload():
+        uploaded_files = input.upload_image()
+        if uploaded_files:
+            # Ensure the static directory exists
+            if not os.path.exists(image_folder):
+                os.makedirs(image_folder)
+                print(f"Created directory: {image_folder}")
+
+            for file_info in uploaded_files:
+                file_path = file_info["datapath"]  # Temporary file path
+                dest_path = os.path.join(image_folder, file_info["name"])  # Destination path
+                shutil.move(file_path, dest_path)  # Save file to the static directory
+
+            # Refresh the image list after uploading files
+            refresh_image_list()
+
+            # Set the current image index to the first image after the list is refreshed
+            if len(image_list()) > 0:
+                current_image_index.set(0)  # Ensure it starts from the first image after refresh
+
+            # Print debugging information
+            print(f"Uploaded {len(uploaded_files)} files.")
+            print(f"Current image list: {image_list()}")
+
+
+    # Handle refresh button
+    @reactive.Effect
+    @reactive.event(input.refresh_images)
+    def handle_refresh():
+        refresh_image_list()
+        if len(image_list()) > 0:
+            current_image_index.set(0)  # Ensure it starts from the first image after refresh
+        print("Image list refreshed.")
+
+    # Refresh the image list on app initialization
+    refresh_image_list()
+
 
 # Create the app
 app = App(app_ui, server)
